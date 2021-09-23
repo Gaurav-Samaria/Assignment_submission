@@ -1,6 +1,6 @@
 from typing import Optional
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from CRUD.model import *
 from CRUD.database import *
 app = FastAPI()
@@ -14,32 +14,38 @@ async def token_gen(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 @app.get("/")
-def getAPI(token: str = Depends(oauth_scheme)):
-    return get()
+async def readAPI(token: str = Depends(oauth_scheme)):
+    response = await fetch_all()
+    return response
 
 
-@app.get("/api/{id}")
-def getIDAPI(id: int, token: str = Depends(oauth_scheme)):
-    return getID(id)
+@app.get("/api/{title}", response_model = todo)
+async def readIDAPI(title, token: str = Depends(oauth_scheme)):
+    response = await fetch_by_id(title)
+    if response:
+        return response
+    raise HTTPException(404, f"there is no TODO item with this title {title}")
 
 
-@app.post("/api")
-def addAPI(todo: InputTodo, token: str = Depends(oauth_scheme)):
-    return add(todo)
+@app.post("/api", response_model=todo)
+async def addAPI(todo:todo, token: str = Depends(oauth_scheme)):
+    response = await create_todo(todo.dict())
+    if response:
+        return response
+    raise HTTPException(400, "Bad Request")
 
 
-@app.put("/api/{id}")
-def updateAPI(id: int, todo: InputTodo, token: str = Depends(oauth_scheme)):
-    return update(id, todo)
+@app.put("/api/{title}", response_model=todo)
+async def updateAPI(title: str, desc:str, token: str = Depends(oauth_scheme)):
+    response = await update(title,desc)
+    if response:
+        return response
+    raise HTTPException(404, f"there is no todo item with title {title}")
 
 
-@app.delete("/api/{id}")
-def deleteAPI(id: int, token: str = Depends(oauth_scheme)):
-    todo = getID(id)
-    delete(id)
-    return todo
-
-
-@app.on_event("startup")
-async def startup_event():
-    connectDb()
+@app.delete("/api/{title}")
+async def deleteAPI(title, token: str = Depends(oauth_scheme)):
+    response=await delete(title)
+    if response:
+        return "Succesfully deleted todo Item"
+    raise HTTPException(404, f"there is no todo item with title {title}")

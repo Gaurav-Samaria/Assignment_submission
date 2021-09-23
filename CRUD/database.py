@@ -1,60 +1,36 @@
-from peewee import *
-import datetime
-from .model import InputTodo, ShowTodo
-db = SqliteDatabase('Todo.db')
+from .model import todo
+
+import motor.motor_asyncio
+
+client = motor.motor_asyncio.AsyncIOMotorClient('mongodb://localhost:27017')
+
+database = client.TodoDatabase
+collection = database.todo
 
 
-class BaseModel(Model):
-    class Meta:
-        database = db
+async def fetch_by_id(title):
+    document = await collection.find_one({"title":title})
+    return document
 
+async def fetch_all():
+    todos = []
+    cursor = collection.find({})
+    async for document in cursor:
+        todos.append(todo(**document))
+    return todos
 
-class Todo(BaseModel):
-    id = AutoField()
-    title = CharField(max_length=100)
-    status = CharField(max_length=500)
-    lastUpdate = DateTimeField(default=datetime.datetime.now)
+async def create_todo(todo):
+    document = todo
+    result = await collection.insert_one(document)
+    return result
 
+async def update(title, desc):
+    await collection.update_one({"title":title},{"$set":{
+        "description":desc
+        }})
+    document = await collection.find_one({"title":title})
+    return document
 
-def connectDb():
-    global db
-    db.connect()
-    db.create_tables([Todo])
-
-
-def add(InputTodo):
-    todo = Todo.create(title=InputTodo.title, status=InputTodo.status)
-    db.commit()
-    return ShowTodo(id=todo.id, title=todo.title, status=todo.status, lastUpdate=(todo.lastUpdate).strftime("%d/%m/%Y, %H:%M:%S"))
-
-
-def update(id, InputTodo):
-    todo = Todo.select().where(Todo.id == id).get()
-    todo.title = InputTodo.title
-    todo.status = InputTodo.status
-    todo.lastUpdate = datetime.datetime.now()
-    todo.save()
-    db.commit()
-    return ShowTodo(id=todo.id, title=todo.title, status=todo.status, lastUpdate=(todo.lastUpdate).strftime("%d/%m/%Y, %H:%M:%S"))
-
-
-def commitData():
-    db.commit()
-
-
-def delete(id):
-    todo = Todo.delete().where(Todo.id == id).execute()
-
-
-def get():
-    todos = Todo.select()
-    todoList = []
-    for i in todos:
-        todoList.append(ShowTodo(id=i.id, title=i.title, status=i.status, lastUpdate=(
-            i.lastUpdate).strftime("%d/%m/%Y, %H:%M:%S")))
-    return todoList
-
-
-def getID(id):
-    todo = Todo.select().where(Todo.id == id).get()
-    return ShowTodo(id=todo.id, title=todo.title, status=todo.status, lastUpdate=(todo.lastUpdate).strftime("%d/%m/%Y, %H:%M:%S"))
+async def delete(title):
+    await collection.delete_one({"title":title})
+    return True
